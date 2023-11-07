@@ -1,0 +1,4 @@
+#define PORT 8080
+#define MAX_LISTEN_CONN 128
+#define HTTP_REQ_BUF 1024
+#define HTTP_RESP_BUF 1024

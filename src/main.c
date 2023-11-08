@@ -2,6 +2,8 @@
 #include "../libs/macros.h"
 
 #include <netinet/in.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdnoreturn.h>
@@ -9,6 +11,21 @@
 #include <strings.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+atomic_int threadCounter = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+
+void renewThread(void *arg) {
+  int *acceptedSocket = (int *)arg;
+
+  close(*acceptedSocket);
+
+  pthread_mutex_lock(&mutex);
+  threadCounter--;
+  pthread_cond_signal(&cond);
+  pthread_mutex_unlock(&mutex);
+}
 
 noreturn void *acceptConn(void *arg) {
   acceptParams *ap = (acceptParams *)arg;
@@ -34,6 +51,7 @@ noreturn void *acceptConn(void *arg) {
               "Content-type: text/plain\r\n"
               "Content-length: %d\r\n\r\n%d",
               calcDigits(result), result);
+      write(acceptedSocket, respBuf, strlen(respBuf));
     }
 
     close(acceptedSocket);
@@ -41,6 +59,9 @@ noreturn void *acceptConn(void *arg) {
 }
 
 int main(int argc, char *argv[]) {
+  serverSettings ss = {.threadCount = 4};
+  setupServerSettings(argc, argv, &ss);
+
   int serverFd;
   sockaddr_in address;
   int addrLen = sizeof(address);
@@ -66,20 +87,17 @@ int main(int argc, char *argv[]) {
   }
 
   while (1) {
-    int acceptedSocket;
-    if ((acceptedSocket = accept(serverFd, (sockaddr *)&address,
-                                 (socklen_t *)&addrLen)) < 0) {
-      perror("In accept");
-      // pthread_exit(NULL);
+    pthread_mutex_lock(&mutex);
+    while (threadCounter >= ss.threadCount) {
+      pthread_cond_wait(&cond, &mutex);
     }
+    pthread_mutex_unlock(&mutex);
 
-    char reqBuf[HTTP_REQ_BUF];
-    bzero(reqBuf, HTTP_REQ_BUF);
-    const size_t receivedBytes = read(acceptedSocket, reqBuf, HTTP_REQ_BUF);
-    if (receivedBytes > 0) {
-      char respBuf[HTTP_RESP_BUF];
-      write(receivedBytes, respBuf, strlen(respBuf));
-    }
+    pthread_t threadID;
+    acceptParams ap = {serverFd, (sockaddr *)&address, (socklen_t *)&addrLen};
+    pthread_create(&threadID, NULL, acceptConn, &ap);
+    atomic_fetch_add(&threadCounter, 1);
+    printf("[Info] Thread Created: No.%d\n", threadCounter);
   }
 
   return EXIT_SUCCESS;

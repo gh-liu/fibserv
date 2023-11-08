@@ -1,13 +1,44 @@
+#include "../libs/helpers.h"
 #include "../libs/macros.h"
-#include "../libs/structs.h"
 
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdnoreturn.h>
 #include <string.h>
 #include <strings.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+noreturn void *acceptConn(void *arg) {
+  acceptParams *ap = (acceptParams *)arg;
+  int acceptedSocket;
+  while (1) {
+    if ((acceptedSocket = accept(ap->serverFd, ap->addr, ap->addrLen)) < 0) {
+      perror("In accept");
+      // pthread_exit(NULL);
+    }
+
+    char reqBuf[HTTP_REQ_BUF];
+    bzero(reqBuf, HTTP_REQ_BUF);
+    const size_t receivedBytes = read(acceptedSocket, reqBuf, HTTP_REQ_BUF);
+
+    if (receivedBytes > 0) {
+      char respBuf[HTTP_RESP_BUF];
+      const int num = retrieveGETQueryIntValByKey(reqBuf, "num");
+
+      int result = calcFibonacci(num);
+
+      sprintf(respBuf,
+              "HTTP/1.1 200 OK\r\n"
+              "Content-type: text/plain\r\n"
+              "Content-length: %d\r\n\r\n%d",
+              calcDigits(result), result);
+    }
+
+    close(acceptedSocket);
+  }
+}
 
 int main(int argc, char *argv[]) {
   int serverFd;

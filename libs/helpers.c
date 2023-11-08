@@ -1,6 +1,7 @@
 #include "structs.h"
 #include <stdlib.h>
 #include <string.h>
+#include <tgmath.h>
 #include <uriparser/Uri.h>
 #include <uriparser/UriBase.h>
 
@@ -86,3 +87,5 @@ int calcFibonacci(int n) {
   // return __calcFibTOC(n, 0, 1);
   return __calcFibRecusrion(n);
 }
+
+int calcDigits(int n) { return n == 0 ? 0 : (int)floor(log10(abs(n))) + 1; }
